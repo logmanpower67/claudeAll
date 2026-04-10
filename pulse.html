@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pulse — Live Data</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --void:#0e0000;
+  --red:#c0392b;
+  --red-light:#e74c3c;
+  --red-dim:#7a1e1e;
+  --cream:#f5e6e6;
+  --muted:#5a2222;
+  --border:#2a0a0a;
+}
+html{scroll-behavior:smooth}
+body{background:var(--void);color:var(--cream);font-family:'Helvetica Neue',sans-serif;overflow-x:hidden;cursor:none}
+#cursor{position:fixed;width:8px;height:8px;background:var(--red-light);border-radius:50%;pointer-events:none;z-index:9999;transform:translate(-50%,-50%)}
+#cursor-ring{position:fixed;width:32px;height:32px;border:1px solid rgba(231,76,60,0.35);border-radius:50%;pointer-events:none;z-index:9998;transform:translate(-50%,-50%)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:1.4rem 3rem;background:rgba(14,0,0,0.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.nav-logo{font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:var(--red-light);text-decoration:none;font-weight:400}
+.nav-center{display:flex;gap:0;list-style:none;border:1px solid var(--border)}
+.nav-center li a{display:block;padding:.5rem 1.4rem;font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:all .3s;border-right:1px solid var(--border)}
+.nav-center li:last-child a{border-right:none}
+.nav-center li a:hover{color:var(--cream)}
+.nav-center li a.active{color:var(--red-light);background:rgba(192,57,43,.08)}
+.nav-right{display:flex;gap:2rem;list-style:none}
+.nav-right a{text-decoration:none;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);transition:color .3s}
+.nav-right a:hover{color:var(--red-light)}
+
+/* LIVE INDICATOR */
+.live-badge{display:flex;align-items:center;gap:8px;font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--red-light)}
+.live-dot{width:6px;height:6px;background:var(--red-light);border-radius:50%;animation:pulse-dot 1.4s infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* HERO / DASHBOARD */
+#hero{min-height:100vh;padding:8rem 3rem 4rem;display:flex;flex-direction:column;gap:2rem}
+.hero-header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;border-bottom:1px solid var(--border);padding-bottom:2rem}
+.hero-title-wrap .kicker{font-size:.65rem;letter-spacing:.35em;text-transform:uppercase;color:var(--red);margin-bottom:1rem}
+h1.hero-title{font-size:clamp(3rem,8vw,7rem);font-weight:300;line-height:.9;letter-spacing:-.04em;color:var(--cream)}
+h1.hero-title span{color:var(--red-light)}
+.hero-meta{text-align:right}
+.hero-meta .time-big{font-size:2.8rem;font-weight:300;letter-spacing:-.03em;color:var(--cream);font-variant-numeric:tabular-nums}
+.hero-meta .date-small{font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-top:.3rem}
+
+/* MAIN WAVEFORM */
+.main-wave-wrap{position:relative;border:1px solid var(--border);background:#0b0000}
+canvas#main-wave{width:100%;height:200px;display:block}
+.wave-label{position:absolute;top:1rem;left:1rem;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--red-dim)}
+
+/* METRIC GRID */
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border)}
+.metric{background:var(--void);padding:1.8rem;position:relative;overflow:hidden;transition:background .2s}
+.metric:hover{background:#120202}
+.metric::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform .4s ease}
+.metric:hover::before{transform:scaleX(1)}
+.metric-label{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:.8rem}
+.metric-value{font-size:2.2rem;font-weight:300;letter-spacing:-.03em;color:var(--cream);font-variant-numeric:tabular-nums}
+.metric-value span{font-size:1rem;color:var(--muted)}
+.metric-delta{font-size:.65rem;margin-top:.4rem}
+.metric-delta.up{color:#4ade80}
+.metric-delta.down{color:var(--red-light)}
+.metric-sparkline{margin-top:.8rem;height:32px;position:relative}
+.metric-sparkline canvas{width:100%;height:100%;display:block}
+
+/* CHARTS ROW */
+#charts{padding:4rem 3rem;border-top:1px solid var(--border)}
+.charts-grid{display:grid;grid-template-columns:2fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border)}
+.chart-panel{background:var(--void);padding:2rem}
+.chart-title{font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:center}
+.chart-title span{color:var(--red-light)}
+canvas.chart{width:100%;display:block}
+
+/* FREQUENCY BARS */
+#frequency{padding:4rem 3rem;border-top:1px solid var(--border)}
+.eyebrow{font-size:.62rem;letter-spacing:.3em;text-transform:uppercase;color:var(--red);margin-bottom:1rem}
+.sec-title{font-size:clamp(1.8rem,4vw,3rem);font-weight:300;color:var(--cream);margin-bottom:3rem;line-height:1.1;letter-spacing:-.02em}
+canvas#freq-bars{width:100%;height:280px;display:block;border:1px solid var(--border);background:#0b0000}
+
+/* SCATTER / RADIAL */
+#radial{padding:4rem 3rem;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center}
+.radial-text .eyebrow{margin-bottom:1rem}
+.radial-heading{font-size:clamp(1.8rem,3.5vw,2.8rem);font-weight:300;color:var(--cream);line-height:1.15;margin-bottom:1.5rem;letter-spacing:-.02em}
+.radial-body{font-size:.85rem;color:var(--muted);line-height:1.8;max-width:380px}
+canvas#radial-canvas{width:100%;aspect-ratio:1;display:block;background:#0b0000;border:1px solid var(--border)}
+
+/* TERMINAL */
+#terminal-section{padding:4rem 3rem;border-top:1px solid var(--border)}
+.terminal{background:#080000;border:1px solid var(--border);padding:1.5rem;font-family:'Courier New',monospace;height:280px;overflow-y:auto;position:relative}
+.terminal-header{display:flex;gap:8px;margin-bottom:1.2rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.term-dot{width:10px;height:10px;border-radius:50%}
+.term-dot.r{background:#c0392b}.term-dot.y{background:#7a6a00}.term-dot.g{background:#2a5a2a}
+.terminal-title{font-size:.62rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;margin-left:.5rem}
+.term-line{font-size:.78rem;line-height:1.7;margin-bottom:.1rem}
+.term-line .ts{color:var(--red-dim)}
+.term-line .val{color:var(--red-light)}
+.term-line .ok{color:#4ade80}
+.term-line .info{color:#888}
+.term-cursor{display:inline-block;width:8px;height:12px;background:var(--red-light);animation:blink .9s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* SITE NAV */
+.site-nav-banner{border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
+.snc{background:var(--void);padding:3rem;text-decoration:none;display:block;transition:background .3s}
+.snc:hover{background:#120202}
+.snc-label{font-size:.62rem;letter-spacing:.25em;text-transform:uppercase;color:var(--muted);margin-bottom:.8rem}
+.snc-title{font-size:2rem;font-weight:300;margin-bottom:.7rem;line-height:1.1}
+.snc.void .snc-title{color:#c9a96e}
+.snc.bot .snc-title{color:#7ab86e}
+.snc-desc{font-size:.8rem;color:var(--muted);line-height:1.7;max-width:320px;margin-bottom:1.2rem}
+.snc-arrow{font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;gap:8px;transition:gap .2s}
+.snc.void .snc-arrow{color:#c9a96e}
+.snc.bot .snc-arrow{color:#7ab86e}
+.snc:hover .snc-arrow{gap:14px}
+
+footer{border-top:1px solid var(--border);padding:2rem 3rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
+.footer-sig{font-size:.7rem;letter-spacing:.15em;color:var(--muted);text-transform:uppercase}
+.footer-made{font-size:.7rem;color:#2a0808}
+
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+
+@media(max-width:900px){
+  nav{padding:1.2rem 1.5rem}
+  .nav-center{display:none}
+  .nav-right{display:none}
+  #hero{padding:6rem 1.5rem 3rem}
+  .metric-grid{grid-template-columns:1fr 1fr}
+  .charts-grid{grid-template-columns:1fr}
+  #charts,#frequency,#terminal-section{padding:3rem 1.5rem}
+  #radial{grid-template-columns:1fr;padding:3rem 1.5rem}
+  .site-nav-banner{grid-template-columns:1fr}
+  footer{padding:1.5rem}
+}
+</style>
+</head>
+<body>
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<nav>
+  <a href="index.html" class="nav-logo">Studio</a>
+  <ul class="nav-center">
+    <li><a href="index.html">Void</a></li>
+    <li><a href="botanica.html">Botanica</a></li>
+    <li><a href="pulse.html" class="active">Pulse</a></li>
+  </ul>
+  <ul class="nav-right">
+    <li><a href="#charts">Charts</a></li>
+    <li><a href="#frequency">Frequency</a></li>
+    <li><a href="#terminal-section">Terminal</a></li>
+    <li><div class="live-badge"><span class="live-dot"></span>Live</div></li>
+  </ul>
+</nav>
+
+<section id="hero">
+  <div class="hero-header reveal">
+    <div class="hero-title-wrap">
+      <p class="kicker">Live data stream — 2026</p>
+      <h1 class="hero-title">Pulse<br><span>beating.</span></h1>
+    </div>
+    <div class="hero-meta">
+      <div class="time-big" id="h-clock">00:00:00</div>
+      <div class="date-small" id="h-date"></div>
+    </div>
+  </div>
+
+  <div class="main-wave-wrap reveal">
+    <span class="wave-label">Signal — channel 01</span>
+    <canvas id="main-wave"></canvas>
+  </div>
+
+  <div class="metric-grid reveal">
+    <div class="metric">
+      <p class="metric-label">Throughput</p>
+      <div class="metric-value"><span id="m-throughput">0</span><span> kb/s</span></div>
+      <p class="metric-delta up" id="m-throughput-d">↑ 0.0%</p>
+      <div class="metric-sparkline"><canvas class="sparkline" id="sp-1"></canvas></div>
+    </div>
+    <div class="metric">
+      <p class="metric-label">Latency</p>
+      <div class="metric-value"><span id="m-latency">0</span><span> ms</span></div>
+      <p class="metric-delta" id="m-latency-d">— stable</p>
+      <div class="metric-sparkline"><canvas class="sparkline" id="sp-2"></canvas></div>
+    </div>
+    <div class="metric">
+      <p class="metric-label">Events / sec</p>
+      <div class="metric-value"><span id="m-events">0</span></div>
+      <p class="metric-delta up" id="m-events-d">↑ 0.0%</p>
+      <div class="metric-sparkline"><canvas class="sparkline" id="sp-3"></canvas></div>
+    </div>
+    <div class="metric">
+      <p class="metric-label">Error rate</p>
+      <div class="metric-value"><span id="m-errors">0.0</span><span>%</span></div>
+      <p class="metric-delta ok" id="m-errors-d">✓ nominal</p>
+      <div class="metric-sparkline"><canvas class="sparkline" id="sp-4"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<section id="charts">
+  <div class="charts-grid reveal">
+    <div class="chart-panel">
+      <div class="chart-title">24hr activity <span id="chart-live">● live</span></div>
+      <canvas class="chart" id="line-chart" height="160"></canvas>
+    </div>
+    <div class="chart-panel">
+      <div class="chart-title">Status distribution</div>
+      <canvas class="chart" id="donut-chart" height="160"></canvas>
+    </div>
+  </div>
+</section>
+
+<section id="frequency">
+  <div class="reveal"><p class="eyebrow">Frequency analysis</p><h2 class="sec-title">The signal,<br>decomposed.</h2></div>
+  <canvas id="freq-bars" class="reveal"></canvas>
+</section>
+
+<section id="radial">
+  <div class="radial-text reveal">
+    <p class="eyebrow">Radial stream</p>
+    <h2 class="radial-heading">Data as<br>geometry.</h2>
+    <p class="radial-body">Every data point is a moment in time. Plotted radially, patterns that are invisible in a flat chart become shapes — rhythms, anomalies, cycles. The same numbers, a completely different truth.</p>
+  </div>
+  <canvas id="radial-canvas" class="reveal"></canvas>
+</section>
+
+<section id="terminal-section">
+  <div class="reveal"><p class="eyebrow">System log</p><h2 class="sec-title" style="margin-bottom:2rem">The raw feed.</h2></div>
+  <div class="terminal reveal" id="terminal">
+    <div class="terminal-header">
+      <div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div>
+      <span class="terminal-title">pulse — live stream</span>
+    </div>
+    <div id="term-body"></div>
+  </div>
+</section>
+
+<div class="site-nav-banner">
+  <a href="index.html" class="snc void">
+    <p class="snc-label">Return to</p>
+    <h3 class="snc-title">Void</h3>
+    <p class="snc-desc">Dark, cosmic, mathematical. Gold particles drifting through pure algorithms.</p>
+    <span class="snc-arrow">Enter Void →</span>
+  </a>
+  <a href="botanica.html" class="snc bot">
+    <p class="snc-label">Or visit</p>
+    <h3 class="snc-title">Botanica</h3>
+    <p class="snc-desc">Slow, organic, green. Procedural forests breathing in your browser.</p>
+    <span class="snc-arrow">Enter Botanica →</span>
+  </a>
+</div>
+
+<footer>
+  <span class="footer-sig">Pulse — Live Data Stream</span>
+  <span class="footer-made">All data generated in real time — no servers — 2026</span>
+</footer>
+
+<script>
+// CURSOR
+const cur=document.getElementById('cursor'),ring=document.getElementById('cursor-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cur.style.left=mx+'px';cur.style.top=my+'px'});
+(function ar(){rx+=(mx-rx)*.12;ry+=(my-ry)*.12;ring.style.left=rx+'px';ring.style.top=ry+'px';requestAnimationFrame(ar)})();
+
+// REVEAL
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in')}),{threshold:.06});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+// CLOCK
+function tick(){const n=new Date();document.getElementById('h-clock').textContent=n.toLocaleTimeString('en-US',{hour12:false});document.getElementById('h-date').textContent=n.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}
+tick();setInterval(tick,1000);
+
+// DATA SIMULATION
+class DataStream{
+  constructor(n=80,base=50,noise=20){this.data=Array.from({length:n},()=>base+Math.random()*noise);this.n=n;this.base=base;this.noise=noise}
+  tick(){const last=this.data[this.data.length-1];const next=Math.max(0,last+(Math.random()-.48)*this.noise*.4+Math.sin(Date.now()*.001)*this.noise*.1);this.data.shift();this.data.push(next);return next}
+  get last(){return this.data[this.data.length-1]}
+  get prev(){return this.data[this.data.length-2]}
+}
+
+const streams={throughput:new DataStream(80,280,80),latency:new DataStream(80,22,12),events:new DataStream(80,1200,400),errors:new DataStream(80,0.8,0.6)};
+const sparkStreams={sp1:new DataStream(40,280,80),sp2:new DataStream(40,22,12),sp3:new DataStream(40,1200,400),sp4:new DataStream(40,0.8,0.6)};
+
+// MAIN WAVEFORM
+(()=>{
+  const cv=document.getElementById('main-wave'),cx=cv.getContext('2d');
+  let W,H;
+  function resize(){W=cv.width=cv.offsetWidth;H=cv.height=200}
+  resize();window.addEventListener('resize',resize);
+  const wave=new DataStream(W,100,60);
+  (function draw(){
+    for(let i=0;i<3;i++)wave.tick();
+    cx.fillStyle='rgba(11,0,0,.25)';cx.fillRect(0,0,W,H);
+    cx.beginPath();
+    const d=wave.data,step=W/d.length;
+    for(let i=0;i<d.length;i++){
+      const x=i*step,y=H/2+(d[i]-100)/100*(H*.4);
+      i===0?cx.moveTo(x,y):cx.lineTo(x,y);
+    }
+    cx.strokeStyle='rgba(231,76,60,.8)';cx.lineWidth=1.5;cx.stroke();
+    // mirror
+    cx.beginPath();
+    for(let i=0;i<d.length;i++){const x=i*step,y=H/2-(d[i]-100)/100*(H*.2);i===0?cx.moveTo(x,y):cx.lineTo(x,y)}
+    cx.strokeStyle='rgba(192,57,43,.25)';cx.lineWidth=.8;cx.stroke();
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// METRICS UPDATE
+function fmt(n,decimals=0){return n.toFixed(decimals)}
+setInterval(()=>{
+  const t=streams.throughput.tick(),l=streams.latency.tick(),e=streams.events.tick(),er=Math.max(0,streams.errors.tick());
+  document.getElementById('m-throughput').textContent=fmt(t);
+  document.getElementById('m-latency').textContent=fmt(l,1);
+  document.getElementById('m-events').textContent=fmt(e);
+  document.getElementById('m-errors').textContent=fmt(er,2);
+  const td=(t-streams.throughput.prev)/streams.throughput.prev*100;
+  const td_el=document.getElementById('m-throughput-d');
+  td_el.textContent=(td>=0?'↑ ':'↓ ')+Math.abs(td).toFixed(1)+'%';
+  td_el.className='metric-delta '+(td>=0?'up':'down');
+  const ed=(e-streams.events.prev)/streams.events.prev*100;
+  const ed_el=document.getElementById('m-events-d');
+  ed_el.textContent=(ed>=0?'↑ ':'↓ ')+Math.abs(ed).toFixed(1)+'%';
+  ed_el.className='metric-delta '+(ed>=0?'up':'down');
+  const lat_el=document.getElementById('m-latency-d');
+  const ld=l-streams.latency.prev;
+  lat_el.textContent=Math.abs(ld)<2?'— stable':(ld>0?'↑ rising':'↓ dropping');
+  lat_el.className='metric-delta '+(Math.abs(ld)<2?'':ld>0?'down':'up');
+  const er_el=document.getElementById('m-errors-d');
+  er_el.textContent=er<1?'✓ nominal':er<2?'! elevated':'✗ high';
+  er_el.className='metric-delta '+(er<1?'ok':er<2?'':'down');
+},200);
+
+// SPARKLINES
+function drawSparkline(cvId,stream,color){
+  const cv=document.getElementById(cvId);if(!cv)return;
+  const cx=cv.getContext('2d');cv.width=cv.offsetWidth*2;cv.height=64;
+  const W=cv.width,H=cv.height,d=stream.data.slice(-40);
+  cx.clearRect(0,0,W,H);
+  const min=Math.min(...d),max=Math.max(...d),range=max-min||1;
+  cx.beginPath();
+  d.forEach((v,i)=>{const x=(i/(d.length-1))*W,y=H-((v-min)/range)*(H*.85)-H*.07;i===0?cx.moveTo(x,y):cx.lineTo(x,y)});
+  cx.strokeStyle=color;cx.lineWidth=1.5;cx.stroke();
+}
+setInterval(()=>{
+  sparkStreams.sp1.tick();sparkStreams.sp2.tick();sparkStreams.sp3.tick();sparkStreams.sp4.tick();
+  drawSparkline('sp-1',sparkStreams.sp1,'rgba(231,76,60,.7)');
+  drawSparkline('sp-2',sparkStreams.sp2,'rgba(231,76,60,.5)');
+  drawSparkline('sp-3',sparkStreams.sp3,'rgba(231,76,60,.7)');
+  drawSparkline('sp-4',sparkStreams.sp4,'rgba(74,222,128,.5)');
+},300);
+
+// LINE CHART
+(()=>{
+  const cv=document.getElementById('line-chart'),cx=cv.getContext('2d');
+  let W,H;function resize(){W=cv.width=cv.offsetWidth;H=cv.height=160}
+  resize();window.addEventListener('resize',resize);
+  const hist=new DataStream(120,500,200);
+  const hist2=new DataStream(120,300,120);
+  (function draw(){
+    hist.tick();hist2.tick();
+    cx.fillStyle='#0b0000';cx.fillRect(0,0,W,H);
+    // grid
+    for(let i=0;i<5;i++){const y=H*.1+i*(H*.8/4);cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.strokeStyle='rgba(42,10,10,.8)';cx.lineWidth=.5;cx.stroke()}
+    // lines
+    [[hist,'rgba(231,76,60,.85)',1.5],[hist2,'rgba(192,57,43,.4)',1]].forEach(([s,col,lw])=>{
+      const d=s.data,step=W/d.length,min=Math.min(...d),max=Math.max(...d),range=max-min||1;
+      cx.beginPath();
+      d.forEach((v,i)=>{const x=i*step,y=H*.85-((v-min)/range)*(H*.7);i===0?cx.moveTo(x,y):cx.lineTo(x,y)});
+      cx.strokeStyle=col;cx.lineWidth=lw;cx.stroke();
+    });
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// DONUT CHART
+(()=>{
+  const cv=document.getElementById('donut-chart'),cx=cv.getContext('2d');
+  let W,H;function resize(){W=cv.width=cv.offsetWidth;H=cv.height=160}
+  resize();window.addEventListener('resize',resize);
+  const segs=[{v:68,c:'rgba(192,57,43,.9)',l:'Success'},{v:18,c:'rgba(192,57,43,.4)',l:'Pending'},{v:14,c:'rgba(192,57,43,.15)',l:'Error'}];
+  let rot=0;
+  (function draw(){
+    cx.fillStyle='#0b0000';cx.fillRect(0,0,W,H);
+    const cx2=W/2,cy=H/2,r=Math.min(W,H)*.38,thick=r*.32;
+    rot+=.003;let angle=rot;
+    segs.forEach(s=>{
+      const arc=(s.v/100)*Math.PI*2;
+      cx.beginPath();cx.arc(cx2,cy,r,angle,angle+arc);cx.arc(cx2,cy,r-thick,angle+arc,angle,true);
+      cx.fillStyle=s.c;cx.fill();angle+=arc;
+    });
+    cx.fillStyle='#0b0000';cx.beginPath();cx.arc(cx2,cy,r-thick-2,0,Math.PI*2);cx.fill();
+    cx.fillStyle='rgba(192,57,43,.7)';cx.font=`300 ${Math.floor(H*.22)}px Helvetica Neue`;cx.textAlign='center';cx.textBaseline='middle';cx.fillText('68%',cx2,cy-4);
+    cx.fillStyle='rgba(192,57,43,.35)';cx.font=`300 ${Math.floor(H*.07)}px Helvetica Neue`;cx.fillText('SUCCESS',cx2,cy+H*.13);
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// FREQUENCY BARS
+(()=>{
+  const cv=document.getElementById('freq-bars'),cx=cv.getContext('2d');
+  let W,H;function resize(){W=cv.width=cv.offsetWidth;H=cv.height=280}
+  resize();window.addEventListener('resize',resize);
+  const BARS=64;const freqs=Array.from({length:BARS},(_,i)=>({v:Math.random()*.8,target:Math.random()*.8,speed:.02+Math.random()*.04}));
+  let t=0;
+  (function draw(){
+    t+=.02;
+    cx.fillStyle='rgba(11,0,0,.3)';cx.fillRect(0,0,W,H);
+    const bw=W/BARS,gap=2;
+    freqs.forEach((f,i)=>{
+      if(Math.random()<.05)f.target=Math.abs(Math.sin(t*(i*.1+.5)))*(.4+Math.random()*.6);
+      f.v+=(f.target-f.v)*f.speed;
+      const h=f.v*H*.85+2,x=i*bw,y=H-h;
+      const alpha=.4+f.v*.6;
+      cx.fillStyle=`rgba(${Math.floor(150+f.v*80)},${Math.floor(20+f.v*20)},${Math.floor(15+f.v*10)},${alpha.toFixed(2)})`;
+      cx.fillRect(x+gap/2,y,bw-gap,h);
+      // mirror dim
+      cx.fillStyle=`rgba(192,57,43,${(alpha*.15).toFixed(2)})`;
+      cx.fillRect(x+gap/2,H,bw-gap,-h*.15);
+    });
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// RADIAL CANVAS
+(()=>{
+  const cv=document.getElementById('radial-canvas'),cx=cv.getContext('2d');
+  let S;function resize(){S=cv.width=cv.height=cv.offsetWidth;cv.height=S}
+  resize();window.addEventListener('resize',resize);
+  const points=[];for(let i=0;i<360;i++)points.push({angle:i*(Math.PI*2/360),r:.3+Math.random()*.5});
+  let t=0,frame=0;
+  (function draw(){
+    t+=.008;frame++;
+    cx.fillStyle='rgba(11,0,0,.15)';cx.fillRect(0,0,S,S);
+    const cx2=S/2,cy=S/2,maxR=S*.42;
+    // rings
+    [.25,.5,.75,1].forEach(r=>{cx.beginPath();cx.arc(cx2,cy,maxR*r,0,Math.PI*2);cx.strokeStyle='rgba(42,10,10,.6)';cx.lineWidth=.5;cx.stroke()});
+    // update and draw points
+    points.forEach((p,i)=>{
+      p.r=.3+Math.abs(Math.sin(t+i*.05+Math.sin(t*.3+i*.02)))*0.65;
+      const r=p.r*maxR,x=cx2+Math.cos(p.angle+t*.05)*r,y=cy+Math.sin(p.angle+t*.05)*r;
+      cx.beginPath();cx.arc(x,y,1.5,0,Math.PI*2);
+      cx.fillStyle=`rgba(${Math.floor(180+p.r*60)},${Math.floor(20+p.r*15)},${Math.floor(15+p.r*10)},.8)`;cx.fill();
+    });
+    // connecting lines for nearby points
+    if(frame%3===0){
+      for(let i=0;i<points.length;i+=4){
+        const p1=points[i],p2=points[(i+1)%points.length];
+        const r1=p1.r*maxR,r2=p2.r*maxR;
+        cx.beginPath();
+        cx.moveTo(cx2+Math.cos(p1.angle+t*.05)*r1,cy+Math.sin(p1.angle+t*.05)*r1);
+        cx.lineTo(cx2+Math.cos(p2.angle+t*.05)*r2,cy+Math.sin(p2.angle+t*.05)*r2);
+        cx.strokeStyle=`rgba(192,57,43,${(.05+p1.r*.08).toFixed(3)})`;cx.lineWidth=.5;cx.stroke();
+      }
+    }
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// TERMINAL LOG
+(()=>{
+  const body=document.getElementById('term-body'),term=document.getElementById('terminal');
+  const events=[
+    ()=>`<span class="ts">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> <span class="val">RECV</span> packet_id=${Math.floor(Math.random()*99999)} size=${Math.floor(Math.random()*8192)}b`,
+    ()=>`<span class="ts">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> <span class="ok">OK</span>   latency=${(10+Math.random()*30).toFixed(1)}ms endpoint=/api/stream`,
+    ()=>`<span class="ts">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> <span class="info">INFO</span> buffer=${Math.floor(Math.random()*100)}% queue_depth=${Math.floor(Math.random()*20)}`,
+    ()=>`<span class="ts">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> <span class="val">PUSH</span> channel=01 events=${Math.floor(Math.random()*50)+10}`,
+    ()=>`<span class="ts">[${new Date().toLocaleTimeString('en-US',{hour12:false})}]</span> <span class="ok">BEAT</span> uptime=${Math.floor(Date.now()/1000)%86400}s heartbeat=nominal`,
+  ];
+  let cursor=document.createElement('div');cursor.innerHTML='<span class="term-cursor"></span>';body.appendChild(cursor);
+  setInterval(()=>{
+    const line=document.createElement('div');line.className='term-line';line.innerHTML=events[Math.floor(Math.random()*events.length)]();
+    body.insertBefore(line,cursor);
+    while(body.children.length>30)body.removeChild(body.firstChild);
+    term.scrollTop=term.scrollHeight;
+  },600);
+})();
+</script>
+</body>
+</html>
